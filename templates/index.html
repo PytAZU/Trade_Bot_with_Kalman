@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Realtime Chart</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: rgba(26, 26, 46, 0.9);
+            padding: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .title-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .title { font-size: 28px; font-weight: bold; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-stop {
+            background: linear-gradient(135deg, #ff4444, #cc0000);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 68, 68, 0.3);
+        }
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 68, 68, 0.5);
+        }
+        .btn-stop:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-stop.shutting-down {
+            background: linear-gradient(135deg, #ff8800, #ff6600);
+        }
+        .price-container { text-align: right; }
+        .last-price { font-size: 32px; font-weight: bold; font-family: 'Courier New', monospace; }
+        .price-change { font-size: 18px; margin-top: 5px; }
+        .positive { color: #00ff88; }
+        .negative { color: #ff4444; }
+        .main-content { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+        .chart-container {
+            flex: 1;
+            background: rgba(22, 33, 62, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            min-height: 500px;
+            position: relative;
+        }
+        #chart { width: 100%; height: 100%; min-height: 500px; }
+        .stats-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .stat-card {
+            background: rgba(22, 33, 62, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .stat-label { font-size: 14px; color: #888; margin-bottom: 10px; text-transform: uppercase; }
+        .stat-value { font-size: 28px; font-weight: bold; font-family: 'Courier New', monospace; }
+        .footer {
+            background: rgba(26, 26, 46, 0.9);
+            padding: 15px;
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 2s infinite;
+        }
+        .status-connected { background: #00ff88; box-shadow: 0 0 15px #00ff88; }
+        .status-disconnected { background: #ff4444; box-shadow: 0 0 15px #ff4444; animation: none; }
+        .status-shutting-down { background: #ff8800; box-shadow: 0 0 15px #ff8800; animation: none; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(0, 255, 136, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); }
+        }
+        .overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .overlay.active {
+            display: flex;
+        }
+        .shutdown-message {
+            background: rgba(26, 26, 46, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .shutdown-message h2 {
+            color: #ff8800;
+            margin-bottom: 20px;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #ff8800;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay" id="shutdownOverlay">
+        <div class="shutdown-message">
+            <h2>🛑 Завершение работы...</h2>
+            <div class="spinner"></div>
+            <p style="color: #888; margin-top: 20px;">
+                Закрытие соединений, сохранение данных...
+            </p>
+            <p style="color: #888;">
+                Сервер будет остановлен через несколько секунд
+            </p>
+        </div>
+    </div>
+    
+    <div class="header">
+        <div class="title-section">
+            <div class="title">
+                <span class="status-dot status-connected" id="statusIndicator"></span>
+                <span id="symbolDisplay">{{ symbol }}</span> / USDT
+            </div>
+            <div style="color: #888;">
+                Таймфрейм: <span id="timeframeDisplay">{{ timeframe }}</span>min
+            </div>
+        </div>
+        <div class="controls">
+            <div class="price-container">
+                <div class="last-price" id="lastPrice">--</div>
+                <div class="price-change" id="priceChange">--</div>
+            </div>
+            <button class="btn btn-stop" id="stopButton" onclick="shutdownServer()">
+                <span>⏹</span> Остановить
+            </button>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="chart-container">
+            <div id="chart"></div>
+        </div>
+        
+        <div class="stats-panel">
+            <div class="stat-card">
+                <div class="stat-label">📈 Максимум (24ч)</div>
+                <div class="stat-value positive" id="high24h">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📉 Минимум (24ч)</div>
+                <div class="stat-value negative" id="low24h">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📊 Объем (24ч)</div>
+                <div class="stat-value" id="volume24h">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">⏰ Обновление</div>
+                <div class="stat-value" style="font-size: 16px;" id="lastUpdate">--</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <span>Bybit Realtime Chart</span>
+        <span>🕐 <span id="serverTime">--</span></span>
+        <span>Свечей: <span id="candlesCount">0</span></span>
+    </div>
+    
+    <script>
+        const socket = io();
+        let chartRendered = false;
+        
+        function renderChart(chartJson) {
+            try {
+                const chartData = JSON.parse(chartJson);
+                if (!chartRendered) {
+                    Plotly.newPlot('chart', chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true,
+                        modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                        displaylogo: false
+                    });
+                    chartRendered = true;
+                } else {
+                    Plotly.react('chart', chartData.data, chartData.layout);
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+        
+        function shutdownServer() {
+            if (confirm('Вы уверены, что хотите остановить сервер?\n\nВсе соединения будут закрыты, программа завершит работу.')) {
+                const btn = document.getElementById('stopButton');
+                btn.disabled = true;
+                btn.classList.add('shutting-down');
+                btn.innerHTML = '<span>⏳</span> Завершение...';
+                
+                document.getElementById('shutdownOverlay').classList.add('active');
+                document.getElementById('statusIndicator').className = 'status-dot status-shutting-down';
+                
+                fetch('/api/shutdown', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Сервер останавливается:', data);
+                    })
+                    .catch(error => {
+                        console.error('Ошибка при остановке:', error);
+                    });
+                
+                setTimeout(() => {
+                    socket.disconnect();
+                }, 1000);
+            }
+        }
+        
+        socket.on('chart_update', function(data) {
+            if (data.chart_json) renderChart(data.chart_json);
+            
+            if (data.last_price) {
+                document.getElementById('lastPrice').textContent = 
+                    '$' + data.last_price.toLocaleString('en-US', {
+                        minimumFractionDigits: 2, maximumFractionDigits: 2
+                    });
+                
+                const changeElement = document.getElementById('priceChange');
+                const sign = data.price_change >= 0 ? '+' : '';
+                changeElement.textContent = 
+                    `${sign}${data.price_change.toFixed(2)} (${sign}${data.change_percent.toFixed(2)}%)`;
+                
+                if (data.is_positive) {
+                    document.getElementById('lastPrice').className = 'last-price positive';
+                    changeElement.className = 'price-change positive';
+                } else {
+                    document.getElementById('lastPrice').className = 'last-price negative';
+                    changeElement.className = 'price-change negative';
+                }
+                
+                document.getElementById('high24h').textContent = 
+                    '$' + data.high_24h.toLocaleString('en-US', {
+                        minimumFractionDigits: 2, maximumFractionDigits: 2
+                    });
+                document.getElementById('low24h').textContent = 
+                    '$' + data.low_24h.toLocaleString('en-US', {
+                        minimumFractionDigits: 2, maximumFractionDigits: 2
+                    });
+                document.getElementById('volume24h').textContent = 
+                    data.volume_24h.toLocaleString('en-US', {maximumFractionDigits: 0});
+                document.getElementById('lastUpdate').textContent = data.current_time;
+                document.getElementById('serverTime').textContent = data.current_time;
+            }
+            
+            if (data.candles_count !== undefined) {
+                document.getElementById('candlesCount').textContent = data.candles_count;
+            }
+        });
+        
+        socket.on('server_shutdown', function(data) {
+            console.log('Сервер завершает работу:', data.message);
+            document.getElementById('statusIndicator').className = 'status-dot status-disconnected';
+        });
+        
+        socket.on('connect', function() {
+            document.getElementById('statusIndicator').className = 'status-dot status-connected';
+        });
+        
+        socket.on('disconnect', function() {
+            document.getElementById('statusIndicator').className = 'status-dot status-disconnected';
+        });
+        
+        window.addEventListener('resize', function() {
+            if (chartRendered) Plotly.Plots.resize('chart');
+        });
+    </script>
+</body>
+</html>
