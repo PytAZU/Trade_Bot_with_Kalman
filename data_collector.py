@@ -15,6 +15,7 @@ import requests
 import urllib3
 
 from kalman_filter import KalmanFilter
+from ou_mean_reversion import OUMeanReversion
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -56,6 +57,17 @@ class BybitDataCollector:
         )
         self.kalman_estimates = deque(maxlen=self.max_candles)
         self._data_lock = RLock()
+
+        # Процесс Орнштейна-Уленбека
+        self.ou = OUMeanReversion(
+            window=config.OU_WINDOW,
+            min_obs=config.OU_MIN_OBS,
+            entry_z=config.OU_ENTRY_Z,
+            exit_z=config.OU_EXIT_Z,
+            stop_z=config.OU_STOP_Z,
+            delta_t=config.OU_DELTA_T,
+        )
+        self.ou_signal = None
         
         # Загрузка начальных данных
         self.fetch_initial_candles()
@@ -151,13 +163,19 @@ class BybitDataCollector:
             else:
                 print(f"❌ ОШИБКА API: {data.get('retMsg', 'Unknown error')}")
 
-            # Инициализация фильтра Калмана историческими данными
+            # Инициализация фильтра Калмана и процесса OU историческими данными
             if len(self.candles_data) > 0:
                 for candle in self.candles_data:
                     fair_price = self.kalman.update(candle['close'])
                     self.kalman_estimates.append(fair_price)
+
+                    # Обновляем OU: spread = close - справедливая цена
+                    spread = candle['close'] - fair_price
+                    self.ou.update(spread)
+
                 print(f"📈 Фильтр Калмана инициализирован {len(self.kalman_estimates)} оценками")
-                
+                print(f"📊 Процесс OU обновлён на {len(self.candles_data)} исторических свечах")  
+        
         except Exception as e:
             print(f"❌ ОШИБКА при получении начальных данных: {e}")
             import traceback
@@ -451,6 +469,10 @@ class BybitDataCollector:
         fair_price = self.kalman.update(candle['close'])
         self.kalman_estimates.append(fair_price)
 
+        # Обновляем процесс OU на основе нового закрытого бара
+        spread = candle['close'] - fair_price
+        self.ou_signal = self.ou.update(spread)
+
     def get_display_data(self):
         """Получение данных для отображения"""
         with self._data_lock:
@@ -514,3 +536,8 @@ class BybitDataCollector:
         """Возвращает оценки Калмана, выровненные по числу отображаемых свечей."""
         with self._data_lock:
             return self._build_kalman_estimates()
+    
+    def get_ou_status(self) -> dict:
+        """Возвращает текущее состояние процесса OU."""
+        with self._data_lock:
+            return self.ou.get_status()

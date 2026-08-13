@@ -148,7 +148,8 @@ class WebServer:
                 'volume_24h': self.data_collector.volume_24h,
                 'candles_count': len(self.data_collector.candles_data),
                 'current_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'is_positive': last_candle['close'] >= last_candle['open']
+                'is_positive': last_candle['close'] >= last_candle['open'],
+                'ou_status': self.data_collector.get_ou_status()
             }
             
             self.socketio.emit('chart_update', update_data)
@@ -182,7 +183,8 @@ class WebServer:
             'volume_24h': self.data_collector.volume_24h,
             'candles_count': len(self.data_collector.candles_data),
             'current_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'is_positive': last_candle['close'] >= last_candle['open']
+            'is_positive': last_candle['close'] >= last_candle['open'],
+            'ou_status': self.data_collector.get_ou_status()
         }
         
         self.socketio.emit('chart_update', update_data)

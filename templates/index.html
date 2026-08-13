@@ -228,10 +228,66 @@
     <script>
         const socket = io();
         let chartRendered = false;
-        
-        function renderChart(chartJson) {
+        let lastOuStatus = null;
+
+        function formatOuValue(value, digits) {
+            return value !== null && value !== undefined ? value.toFixed(digits) : '--';
+        }
+
+        function buildOuAnnotation(ou) {
+            const z = formatOuValue(ou.z, 2);
+            const theta = formatOuValue(ou.theta, 4);
+            const sigma = formatOuValue(ou.sigma, 2);
+            const signal = ou.signal || '--';
+
+            return {
+                name: 'ou-status',
+                xref: 'paper',
+                yref: 'paper',
+                x: 0.01,
+                y: 0.99,
+                xanchor: 'left',
+                yanchor: 'top',
+                text: (
+                    '<b>OU</b>&nbsp;&nbsp;' +
+                    'Z: ' + z + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
+                    'Signal: ' + signal + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
+                    'θ: ' + theta + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
+                    'σ: ' + sigma
+                ),
+                showarrow: false,
+                align: 'left',
+                bgcolor: 'rgba(22, 33, 62, 0.88)',
+                bordercolor: 'rgba(255, 255, 255, 0.25)',
+                borderwidth: 1,
+                borderpad: 6,
+                opacity: 0.98,
+                captureevents: false,
+                font: {
+                    size: 12,
+                    color: '#ffffff',
+                    family: 'Segoe UI, Courier New, monospace'
+                }
+            };
+        }
+
+        function applyOuAnnotation(layout, ou) {
+            const baseAnnotations = (layout.annotations || []).filter(a => a.name !== 'ou-status');
+            if (!ou) {
+                layout.annotations = baseAnnotations;
+                return layout;
+            }
+            layout.annotations = baseAnnotations.concat([buildOuAnnotation(ou)]);
+            return layout;
+        }
+
+        function renderChart(chartJson, ouStatus) {
             try {
+                if (ouStatus) {
+                    lastOuStatus = ouStatus;
+                }
                 const chartData = JSON.parse(chartJson);
+                chartData.layout = applyOuAnnotation(chartData.layout, lastOuStatus);
                 if (!chartRendered) {
                     Plotly.newPlot('chart', chartData.data, chartData.layout, {
                         responsive: true,
@@ -274,7 +330,7 @@
         }
         
         socket.on('chart_update', function(data) {
-            if (data.chart_json) renderChart(data.chart_json);
+            if (data.chart_json) renderChart(data.chart_json, data.ou_status);
             
             if (data.last_price) {
                 document.getElementById('lastPrice').textContent = 
