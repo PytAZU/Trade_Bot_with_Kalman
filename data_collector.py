@@ -9,6 +9,7 @@ import time
 import ssl
 from datetime import datetime
 from collections import deque
+from threading import RLock
 import websockets
 import requests
 import urllib3
@@ -54,6 +55,7 @@ class BybitDataCollector:
             r=config.KALMAN_R
         )
         self.kalman_estimates = deque(maxlen=self.max_candles)
+        self._data_lock = RLock()
         
         # Загрузка начальных данных
         self.fetch_initial_candles()
@@ -90,20 +92,19 @@ class BybitDataCollector:
                 candles = data["result"]["list"]
                 
                 if candles and isinstance(candles, list):
-                    candles.sort(key=lambda x: int(x[0]) if isinstance(x, list) else int(x.get('timestamp', 0)))
-                    
-                    print(f"\n🕯️ ЗАГРУЖЕННЫЕ СВЕЧИ:")
-                    for i, candle in enumerate(candles, 1):
+                    candles.sort(key=lambda x: int(x[0]) if isinstance(x, list) else int(x.get('start', x.get('timestamp', 0))))
+
+                    parsed_candles = []
+                    for candle in candles:
                         if isinstance(candle, list):
                             timestamp = int(candle[0])
                             open_price = float(candle[1])
                             high_price = float(candle[2])
                             low_price = float(candle[3])
                             close_price = float(candle[4])
-                            # REST API может возвращать volume на 5-й позиции
                             volume = float(candle[5]) if len(candle) > 5 else 0.0
                         elif isinstance(candle, dict):
-                            timestamp = int(candle.get('timestamp', candle.get('start', 0)))
+                            timestamp = int(candle.get('start', candle.get('timestamp', 0)))
                             open_price = float(candle.get('open', 0))
                             high_price = float(candle.get('high', 0))
                             low_price = float(candle.get('low', 0))
@@ -111,19 +112,8 @@ class BybitDataCollector:
                             volume = float(candle.get('volume', 0))
                         else:
                             continue
-                        
-                        time_str = datetime.fromtimestamp(timestamp/1000).strftime('%Y-%m-%d %H:%M:%S')
-                        change = close_price - open_price
-                        change_percent = (change / open_price) * 100 if open_price > 0 else 0
-                        
-                        if i <= 5 or i > len(candles) - 5:
-                            print(f"  {i:3d}. [{time_str}] O:{open_price:12.2f} H:{high_price:12.2f} "
-                                  f"L:{low_price:12.2f} C:{close_price:12.2f} Vol:{volume:10.4f} "
-                                  f"({change:+.2f} / {change_percent:+.2f}%)")
-                        elif i == 6:
-                            print(f"  ... (пропущено {len(candles) - 10} свечей) ...")
-                        
-                        self.candles_data.append({
+
+                        parsed_candles.append({
                             'timestamp': timestamp,
                             'open': open_price,
                             'high': high_price,
@@ -131,14 +121,33 @@ class BybitDataCollector:
                             'close': close_price,
                             'volume': volume
                         })
-                    
-                    if candles:
-                        if isinstance(candles[-1], list):
-                            self.last_candle_time = int(candles[-1][0])
-                        elif isinstance(candles[-1], dict):
-                            self.last_candle_time = int(candles[-1].get('timestamp', candles[-1].get('start', 0)))
-                    
-                    print(f"\n✅ ЗАГРУЖЕНО {len(self.candles_data)} НАЧАЛЬНЫХ СВЕЧЕЙ")
+
+                    print(f"\n🕯️ ЗАГРУЖЕННЫЕ СВЕЧИ:")
+                    for i, candle in enumerate(parsed_candles, 1):
+                        time_str = datetime.fromtimestamp(candle['timestamp']/1000).strftime('%Y-%m-%d %H:%M:%S')
+                        change = candle['close'] - candle['open']
+                        change_percent = (change / candle['open']) * 100 if candle['open'] > 0 else 0
+
+                        if i <= 5 or i > len(parsed_candles) - 5:
+                            print(f"  {i:3d}. [{time_str}] O:{candle['open']:12.2f} H:{candle['high']:12.2f} "
+                                  f"L:{candle['low']:12.2f} C:{candle['close']:12.2f} Vol:{candle['volume']:10.4f} "
+                                  f"({change:+.2f} / {change_percent:+.2f}%)")
+                        elif i == 6:
+                            print(f"  ... (пропущено {len(parsed_candles) - 10} свечей) ...")
+
+                    # Последняя свеча из REST — текущая незакрытая минута; в историю не кладём.
+                    closed_candles = parsed_candles[:-1] if parsed_candles else []
+                    for candle in closed_candles:
+                        self.candles_data.append(candle)
+
+                    if parsed_candles:
+                        last_candle = parsed_candles[-1]
+                        self.current_candle = {**last_candle, 'confirm': False}
+                        self.last_candle_time = last_candle['timestamp']
+
+                    print(f"\n✅ ЗАГРУЖЕНО {len(self.candles_data)} ЗАКРЫТЫХ СВЕЧЕЙ")
+                    if self.current_candle:
+                        print(f"⏳ Текущая формирующаяся свеча вынесена отдельно")
             else:
                 print(f"❌ ОШИБКА API: {data.get('retMsg', 'Unknown error')}")
 
@@ -326,13 +335,14 @@ class BybitDataCollector:
     def _process_single_candle(self, candle_dict):
         """Обработка свечи в формате словаря (WebSocket)"""
         try:
-            timestamp = int(candle_dict.get('timestamp', candle_dict.get('start', candle_dict.get('t', 0))))
+            # start — время открытия свечи (ключ минуты); timestamp — время последней сделки.
+            timestamp = int(candle_dict.get('start', candle_dict.get('t', 0)))
             open_price = float(candle_dict.get('open', candle_dict.get('o', 0)))
             high_price = float(candle_dict.get('high', candle_dict.get('h', 0)))
             low_price = float(candle_dict.get('low', candle_dict.get('l', 0)))
             close_price = float(candle_dict.get('close', candle_dict.get('c', 0)))
             volume = float(candle_dict.get('volume', candle_dict.get('v', 0)))
-            confirm = candle_dict.get('confirm', candle_dict.get('x', True))
+            confirm = candle_dict.get('confirm', candle_dict.get('x', False))
             
             if isinstance(confirm, str):
                 confirm = confirm.lower() == 'true'
@@ -363,7 +373,14 @@ class BybitDataCollector:
         """Обновление данных свечи в хранилище"""
         if timestamp == 0 or open_price == 0:
             return
-        
+
+        with self._data_lock:
+            self._update_candle_data_locked(
+                timestamp, open_price, high_price, low_price, close_price, volume, confirm
+            )
+
+    def _update_candle_data_locked(self, timestamp, open_price, high_price, low_price, close_price, volume, confirm):
+        """Внутреннее обновление свечи (вызывать под _data_lock)."""
         time_str = datetime.fromtimestamp(timestamp/1000).strftime('%H:%M:%S')
         change = close_price - open_price
         change_percent = (change / open_price) * 100 if open_price > 0 else 0
@@ -415,33 +432,67 @@ class BybitDataCollector:
         if candle is None:
             return
 
-        # Защита от дубликатов: если свеча с таким timestamp уже последняя
-        # в истории — не добавляем повторно и фильтр не трогаем.
-        if self.candles_data and self.candles_data[-1]['timestamp'] == candle['timestamp']:
-            return
-
-        self.candles_data.append({
+        candle_entry = {
             'timestamp': candle['timestamp'],
             'open': candle['open'],
             'high': candle['high'],
             'low': candle['low'],
             'close': candle['close'],
             'volume': candle['volume']
-        })
+        }
+
+        # Свеча с таким start уже в истории — обновляем OHLCV, Калман не трогаем.
+        if self.candles_data and self.candles_data[-1]['timestamp'] == candle['timestamp']:
+            self.candles_data[-1] = candle_entry
+            return
+
+        self.candles_data.append(candle_entry)
 
         fair_price = self.kalman.update(candle['close'])
         self.kalman_estimates.append(fair_price)
 
     def get_display_data(self):
         """Получение данных для отображения"""
+        with self._data_lock:
+            return self._build_display_candles()
+
+    def _build_display_candles(self):
+        """Сбор свечей для графика (вызывать под _data_lock)."""
         display_candles = list(self.candles_data)
-        
+
         if self.current_candle:
-            display_candles.append(self.current_candle)
+            if display_candles and display_candles[-1]['timestamp'] == self.current_candle['timestamp']:
+                display_candles[-1] = self.current_candle
+            else:
+                display_candles.append(self.current_candle)
             if len(display_candles) > self.max_candles:
                 display_candles = display_candles[-self.max_candles:]
-        
+
         return display_candles
+
+    def get_render_data(self):
+        """Атомарно возвращает свечи и оценки Калмана одной длины."""
+        with self._data_lock:
+            display_candles = self._build_display_candles()
+            estimates = self._build_kalman_estimates()
+            return display_candles, estimates
+
+    def _build_kalman_estimates(self):
+        """Сбор оценок Калмана (вызывать под _data_lock)."""
+        estimates = list(self.kalman_estimates)
+
+        if self.current_candle is not None:
+            same_as_last = (
+                self.candles_data
+                and self.candles_data[-1]['timestamp'] == self.current_candle['timestamp']
+            )
+            if not same_as_last and estimates:
+                estimates.append(estimates[-1])
+
+        if len(estimates) > self.max_candles:
+            estimates = estimates[-self.max_candles:]
+
+        return estimates
     
     def get_last_candle(self):
         """Получение последней свечи"""
@@ -460,14 +511,6 @@ class BybitDataCollector:
         }
 
     def get_kalman_estimates(self) -> list:
-        """
-        Возвращает оценки справедливой цены, выровненные по числу
-        отображаемых свечей. На каждую закрытую свечу приходится ровно
-        одна оценка; для текущей формирующейся (незакрытой) свечи
-        повторяется последнее значение, чтобы длина линии совпадала с
-        числом свечей на графике.
-        """
-        estimates = list(self.kalman_estimates)
-        if self.current_candle is not None and estimates:
-            estimates.append(estimates[-1])
-        return estimates
+        """Возвращает оценки Калмана, выровненные по числу отображаемых свечей."""
+        with self._data_lock:
+            return self._build_kalman_estimates()

@@ -65,7 +65,13 @@ class ChartBuilder:
         # Добавление объема (реальные данные)
         self._add_volume(fig, timestamps, display_candles)
 
-        if kalman_estimates is not None and len(kalman_estimates) == len(timestamps):
+        if kalman_estimates is not None and len(kalman_estimates) > 0:
+            if len(kalman_estimates) != len(timestamps):
+                if len(kalman_estimates) > len(timestamps):
+                    kalman_estimates = kalman_estimates[-len(timestamps):]
+                else:
+                    pad_value = kalman_estimates[-1]
+                    kalman_estimates = kalman_estimates + [pad_value] * (len(timestamps) - len(kalman_estimates))
             self._add_kalman_line(fig, timestamps, kalman_estimates)
         
         # Настройка макета
@@ -92,7 +98,8 @@ class ChartBuilder:
                     fillcolor=f'rgba(255, 68, 68, 0.7)'
                 ),
                 whiskerwidth=0.2,
-                showlegend=False
+                showlegend=False,
+                uid='price-candles'
             ),
             row=1, col=1
         )
@@ -174,7 +181,8 @@ class ChartBuilder:
             ),
             hovermode='x unified',
             margin=dict(l=60, r=60, t=80, b=50),
-            height=self.config.CHART_HEIGHT
+            height=self.config.CHART_HEIGHT,
+            uirevision='bybit-realtime-chart'
         )
 
     def _add_kalman_line(self, fig, x, y):
@@ -186,7 +194,8 @@ class ChartBuilder:
                 mode='lines',
                 name='Kalman Fair Price',
                 line=dict(color='#ffff00', width=2, dash='solid'),
-                showlegend=True
+                showlegend=True,
+                uid='kalman-fair-price'
             ),
             row=1, col=1
         )

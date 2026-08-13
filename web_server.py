@@ -50,11 +50,12 @@ class WebServer:
         @self.app.route('/api/chart_json')
         def get_chart_json():
             """API для получения графика в JSON"""
-            display_candles = self.data_collector.get_display_data()
+            display_candles, kalman_estimates = self.data_collector.get_render_data()
             chart_json = self.chart_builder.build_chart(
                 display_candles,
                 self.config.SYMBOL,
-                self.data_collector.interval
+                self.data_collector.interval,
+                kalman_estimates=kalman_estimates
             )
             if chart_json:
                 return chart_json
@@ -126,11 +127,12 @@ class WebServer:
     
     def _send_current_data(self):
         """Отправка текущих данных подключившемуся клиенту"""
-        display_candles = self.data_collector.get_display_data()
+        display_candles, kalman_estimates = self.data_collector.get_render_data()
         chart_json = self.chart_builder.build_chart(
             display_candles,
             self.config.SYMBOL,
-            self.data_collector.interval
+            self.data_collector.interval,
+            kalman_estimates=kalman_estimates
         )
         
         if chart_json and display_candles:
@@ -156,12 +158,11 @@ class WebServer:
         if self.is_shutting_down:
             return
             
-        display_candles = self.data_collector.get_display_data()
+        display_candles, kalman_estimates = self.data_collector.get_render_data()
         
         if not display_candles:
             return
         
-        kalman_estimates = self.data_collector.get_kalman_estimates()
         chart_json = self.chart_builder.build_chart(
             display_candles,
             self.config.SYMBOL,
