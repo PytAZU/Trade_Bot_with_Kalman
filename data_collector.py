@@ -16,6 +16,7 @@ import urllib3
 
 from kalman_filter import KalmanFilter
 from ou_mean_reversion import OUMeanReversion
+from demo_trader import DemoTrader
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -68,6 +69,17 @@ class BybitDataCollector:
             delta_t=config.OU_DELTA_T,
         )
         self.ou_signal = None
+
+        # Демо-трейдер
+        self.demo_trader = DemoTrader(
+            initial_balance=config.DEMO_INITIAL_BALANCE,
+            position_size_pct=config.DEMO_POSITION_SIZE_PCT,
+            fee_rate=config.DEMO_FEE_RATE,
+            slippage=config.DEMO_SLIPPAGE,
+            entry_z=config.DEMO_ENTRY_Z,
+            exit_z=config.DEMO_EXIT_Z,
+            stop_z=config.DEMO_STOP_Z,
+        )
         
         # Загрузка начальных данных
         self.fetch_initial_candles()
@@ -473,6 +485,14 @@ class BybitDataCollector:
         spread = candle['close'] - fair_price
         self.ou_signal = self.ou.update(spread)
 
+        # Обновляем демо-трейдера на основе нового закрытого бара
+        if self.ou_signal is not None:
+            self.demo_trader.update(
+                candle['close'],
+                self.ou_signal,
+                candle['timestamp']
+            )
+
     def get_display_data(self):
         """Получение данных для отображения"""
         with self._data_lock:
@@ -541,3 +561,8 @@ class BybitDataCollector:
         """Возвращает текущее состояние процесса OU."""
         with self._data_lock:
             return self.ou.get_status()
+
+    def get_demo_trader_status(self) -> dict:
+        """Возвращает текущее состояние демо-трейдера."""
+        with self._data_lock:
+            return self.demo_trader.get_status()

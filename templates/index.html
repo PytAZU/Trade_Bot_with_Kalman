@@ -157,6 +157,83 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .demo-panel {
+            background: rgba(22, 33, 62, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 0;
+        }
+        .demo-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .demo-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        .demo-status {
+            font-size: 14px;
+            color: #888;
+        }
+        .demo-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .demo-card {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 10px;
+            padding: 15px;
+        }
+        .demo-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 5px;
+        }
+        .demo-value {
+            font-size: 22px;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            color: #ffffff;
+        }
+        .demo-trades-title {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+        .demo-trades-list {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+        .demo-trade-placeholder {
+            color: #666;
+            text-align: center;
+            padding: 10px;
+        }
+        .demo-trade-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 6px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: #ddd;
+        }
+        .demo-trade-row:last-child {
+            border-bottom: none;
+        }
+        .demo-trade-direction-buy { color: #00ff88; }
+        .demo-trade-direction-sell { color: #ff4444; }
     </style>
 </head>
 <body>
@@ -217,6 +294,46 @@
                 <div class="stat-value" style="font-size: 16px;" id="lastUpdate">--</div>
             </div>
         </div>
+
+        <div class="demo-panel">
+            <div class="demo-header">
+                <span class="demo-title">📊 Демо-трейдер</span>
+                <span class="demo-status" id="demoStatus">Нет данных</span>
+            </div>
+            <div class="demo-cards">
+                <div class="demo-card">
+                    <div class="demo-label">Баланс</div>
+                    <div class="demo-value" id="demoBalance">--</div>
+                </div>
+                <div class="demo-card">
+                    <div class="demo-label">PnL</div>
+                    <div class="demo-value" id="demoPnl">--</div>
+                </div>
+                <div class="demo-card">
+                    <div class="demo-label">Комиссии</div>
+                    <div class="demo-value" id="demoFees">--</div>
+                </div>
+                <div class="demo-card">
+                    <div class="demo-label">Сделок</div>
+                    <div class="demo-value" id="demoTradesCount">--</div>
+                </div>
+                <div class="demo-card">
+                    <div class="demo-label">Винрейт</div>
+                    <div class="demo-value" id="demoWinrate">--</div>
+                </div>
+                <div class="demo-card">
+                    <div class="demo-label">Открытая позиция</div>
+                    <div class="demo-value" id="demoPosition">--</div>
+                </div>
+            </div>
+            <div class="demo-trades">
+                <div class="demo-trades-title">Последние сделки</div>
+                <div id="demoTradesList" class="demo-trades-list">
+                    <div class="demo-trade-placeholder">Сделок пока нет</div>
+                </div>
+            </div>
+        </div>
+
     </div>
     
     <div class="footer">
@@ -368,7 +485,56 @@
             if (data.candles_count !== undefined) {
                 document.getElementById('candlesCount').textContent = data.candles_count;
             }
+
+            if (data.demo_status) {
+                updateDemoPanel(data.demo_status);
+            }
         });
+
+        function updateDemoPanel(demo) {
+            document.getElementById('demoBalance').textContent = '$' + demo.balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            const pnl = demo.total_pnl;
+            const pnlEl = document.getElementById('demoPnl');
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            pnlEl.style.color = pnl >= 0 ? '#00ff88' : '#ff4444';
+
+            document.getElementById('demoFees').textContent = '$' + demo.total_fees.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('demoTradesCount').textContent = demo.trades_count;
+            const winrate = demo.trades_count > 0 ? (demo.win_count / demo.trades_count * 100).toFixed(1) + '%' : '--';
+            document.getElementById('demoWinrate').textContent = winrate;
+
+            // Открытая позиция
+            const posEl = document.getElementById('demoPosition');
+            if (demo.open_position) {
+                const pos = demo.position;
+                posEl.textContent = pos.direction + ' @ ' + pos.entry_price.toFixed(2);
+                posEl.style.color = pos.direction === 'BUY' ? '#00ff88' : '#ff4444';
+            } else {
+                posEl.textContent = 'Нет';
+                posEl.style.color = '#aaa';
+            }
+
+            // Последние сделки (до 10)
+            const tradesList = document.getElementById('demoTradesList');
+            if (demo.trades && demo.trades.length > 0) {
+                let html = '';
+                const lastTrades = demo.trades.slice(-10).reverse();
+                for (const trade of lastTrades) {
+                    const dirClass = trade.direction === 'BUY' ? 'demo-trade-direction-buy' : 'demo-trade-direction-sell';
+                    const pnlClass = trade.pnl >= 0 ? 'demo-trade-direction-buy' : 'demo-trade-direction-sell';
+                    html += `<div class="demo-trade-row">
+                        <span class="${dirClass}">${trade.direction}</span>
+                        <span>${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}</span>
+                        <span>${trade.reason}</span>
+                    </div>`;
+                }
+                tradesList.innerHTML = html;
+            } else {
+                tradesList.innerHTML = '<div class="demo-trade-placeholder">Сделок пока нет</div>';
+            }
+
+            document.getElementById('demoStatus').textContent = demo.open_position ? 'Активна позиция' : 'Ожидание сигнала';
+        }
         
         socket.on('server_shutdown', function(data) {
             console.log('Сервер завершает работу:', data.message);
