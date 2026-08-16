@@ -79,6 +79,7 @@ class BybitDataCollector:
             entry_z=config.DEMO_ENTRY_Z,
             exit_z=config.DEMO_EXIT_Z,
             stop_z=config.DEMO_STOP_Z,
+            state_file=config.DEMO_STATE_FILE,
         )
         
         # Загрузка начальных данных
@@ -329,6 +330,8 @@ class BybitDataCollector:
         print("\n🛑 ЗАВЕРШЕНИЕ РАБОТЫ СБОРЩИКА ДАННЫХ")
         print("  Ожидание завершения WebSocket соединения...")
         self.is_running = False
+
+        self.demo_trader.save_state()
         
         # Закрываем WebSocket если открыт
         if self.websocket:

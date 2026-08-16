@@ -6,6 +6,10 @@
 Баланс виртуальный, сделки не отправляются на биржу.
 """
 
+import json
+from pathlib import Path
+from typing import Optional, List, Dict, Union
+
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 
@@ -38,7 +42,8 @@ class DemoTrader:
                  slippage: float = 0.0001,            # проскальзывание (0.01%)
                  entry_z: float = 2.0,
                  exit_z: float = 0.5,
-                 stop_z: float = 3.5):
+                 stop_z: float = 3.5,
+                 state_file: str = "demo_trader_state.json"):
         """
         Args:
             initial_balance: начальный баланс в USDT
@@ -57,6 +62,9 @@ class DemoTrader:
         self.entry_z = entry_z
         self.exit_z = exit_z
         self.stop_z = stop_z
+
+        self.state_file = state_file # сохранил путь
+        self.load_state()  # загрузка сохраненного состояния
 
         # Текущая открытая позиция
         self.position: Optional[Dict] = None   # {direction, entry_price, amount, entry_time}
@@ -188,6 +196,8 @@ class DemoTrader:
         self.trades.append(trade)
         self.position = None
 
+        self.save_state()
+
     def get_status(self) -> Dict:
         """Возвращает текущее состояние демо-трейдера."""
         return {
@@ -200,5 +210,54 @@ class DemoTrader:
             'win_count': self.win_count,
             'loss_count': self.loss_count,
             'trades_count': len(self.trades),
-            'trades': self.trades
+            'trades': [trade.__dict__ for trade in self.trades]
         }
+
+    def save_state(self) -> None:
+        """Сохраняет текущее состояние в JSON-файл."""
+        state = {
+            'balance': self.balance,
+            'initial_balance': self.initial_balance,
+            'total_pnl': self.total_pnl,
+            'total_fees': self.total_fees,
+            'win_count': self.win_count,
+            'loss_count': self.loss_count,
+            'trades_count': len(self.trades),
+            'trades': [trade.__dict__ for trade in self.trades],
+            'position': self.position,
+        }
+        try:
+            Path(self.state_file).write_text(
+                json.dumps(state, indent=2, default=str),
+                encoding='utf-8'
+            )
+        except Exception as e:
+            print(f"❌ Ошибка сохранения состояния демо-трейдера: {e}")
+
+    def load_state(self) -> None:
+        """Загружает состояние из файла, если он существует."""
+        path = Path(self.state_file)
+        if not path.exists():
+            print("ℹ️ Файл состояния демо-трейдера не найден, стартуем с нуля.")
+            return
+
+        try:
+            state = json.loads(path.read_text(encoding='utf-8'))
+            self.balance = state.get('balance', self.initial_balance)
+            self.total_pnl = state.get('total_pnl', 0.0)
+            self.total_fees = state.get('total_fees', 0.0)
+            self.win_count = state.get('win_count', 0)
+            self.loss_count = state.get('loss_count', 0)
+            self.position = state.get('position', None)
+
+            # Восстанавливаем сделки
+            self.trades.clear()
+            for trade_data in state.get('trades', []):
+                try:
+                    trade = Trade(**trade_data)
+                    self.trades.append(trade)
+                except Exception as e:
+                    print(f"⚠️ Пропущена некорректная запись сделки: {e}")
+            print(f"✅ Состояние демо-трейдера загружено: баланс={self.balance:.2f}, сделок={len(self.trades)}")
+        except Exception as e:
+            print(f"❌ Ошибка загрузки состояния демо-трейдера: {e}")

@@ -61,9 +61,11 @@ class Config:
     DEMO_POSITION_SIZE_PCT = 0.1      # доля баланса на одну позицию (10%)
     DEMO_FEE_RATE = 0.0006            # комиссия за сторону (0.06%)
     DEMO_SLIPPAGE = 0.0001            # проскальзывание (0.01%)
-    DEMO_ENTRY_Z = 1.5                # порог z-score для входа
-    DEMO_EXIT_Z = 0.4                 # порог z-score для выхода
-    DEMO_STOP_Z = 3.5                 # порог z-score для стоп-лосса
+    DEMO_ENTRY_Z = 0.5                # порог z-score для входа
+    DEMO_EXIT_Z = 0.3                 # порог z-score для выхода
+    DEMO_STOP_Z = 2.5                 # порог z-score для стоп-лосса
+
+    DEMO_STATE_FILE = "demo_trader_state.json"
     
     # Цветовая схема
     COLORS = {

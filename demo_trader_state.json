@@ -1,0 +1,11 @@
+{
+  "balance": 10000.0,
+  "initial_balance": 10000.0,
+  "total_pnl": 0.0,
+  "total_fees": 0.0,
+  "win_count": 0,
+  "loss_count": 0,
+  "trades_count": 0,
+  "trades": [],
+  "position": null
+}
