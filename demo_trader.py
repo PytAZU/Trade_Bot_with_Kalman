@@ -63,9 +63,6 @@ class DemoTrader:
         self.exit_z = exit_z
         self.stop_z = stop_z
 
-        self.state_file = state_file # сохранил путь
-        self.load_state()  # загрузка сохраненного состояния
-
         # Текущая открытая позиция
         self.position: Optional[Dict] = None   # {direction, entry_price, amount, entry_time}
 
@@ -77,6 +74,9 @@ class DemoTrader:
         self.total_fees = 0.0
         self.win_count = 0
         self.loss_count = 0
+
+        self.state_file = state_file # сохранил путь
+        self.load_state()  # загрузка сохраненного состояния
 
     def reset(self):
         """Сброс всех параметров к начальным."""
