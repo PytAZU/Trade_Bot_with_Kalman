@@ -121,12 +121,18 @@ class OUMeanReversion:
         else:
             stat_std = 0.0
 
+        """
+        Классически z-score считается как (spread - self.mu) / stat_std
+        Если mu не равен нулю, то при spread = 0 (прямо на линии Калмана) 
+        z-score будет равен -mu / stat_std, что не равно нулю. 
+        Это противоречит ожиданию, что на справедливой цене z-score должен быть нулевым.
+        """
         # Текущий z-score
         if stat_std > 0:
-            self.current_z = (spread - self.mu) / stat_std
+            self.current_z = spread / stat_std
         else:
             self.current_z = 0.0
-
+        
         self.ready = True
 
         # Генерация сигнала

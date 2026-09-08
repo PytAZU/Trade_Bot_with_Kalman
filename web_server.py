@@ -128,11 +128,20 @@ class WebServer:
     def _send_current_data(self):
         """Отправка текущих данных подключившемуся клиенту"""
         display_candles, kalman_estimates = self.data_collector.get_render_data()
+        z_history = self.data_collector.get_z_history()
+        trades = self.data_collector.get_trades_for_chart()
+
+        demo_status = self.data_collector.get_demo_trader_status()
+        open_position = demo_status.get('position') if demo_status.get('open_position') else None
+
         chart_json = self.chart_builder.build_chart(
             display_candles,
             self.config.SYMBOL,
             self.data_collector.interval,
-            kalman_estimates=kalman_estimates
+            kalman_estimates=kalman_estimates,
+            z_history=z_history,
+            trades=trades,
+            open_position=open_position
         )
         
         if chart_json and display_candles:
@@ -164,12 +173,17 @@ class WebServer:
         
         if not display_candles:
             return
-        
+
+        z_history = self.data_collector.get_z_history()
+        trades = self.data_collector.get_trades_for_chart()
+
         chart_json = self.chart_builder.build_chart(
             display_candles,
             self.config.SYMBOL,
             self.data_collector.interval,
-            kalman_estimates=kalman_estimates
+            kalman_estimates=kalman_estimates,
+            z_history=z_history,
+            trades=trades
         )
         
         last_candle = display_candles[-1]

@@ -57,6 +57,8 @@ class BybitDataCollector:
             r=config.KALMAN_R
         )
         self.kalman_estimates = deque(maxlen=self.max_candles)
+        # История Z-score (синхронизирована с закрытыми свечами)
+        self.ou_z_history = deque(maxlen=self.max_candles)
         self._data_lock = RLock()
 
         # Процесс Орнштейна-Уленбека
@@ -488,6 +490,10 @@ class BybitDataCollector:
         spread = candle['close'] - fair_price
         self.ou_signal = self.ou.update(spread)
 
+        # Сохраняем Z-score в историю
+        if self.ou_signal is not None:
+            self.ou_z_history.append(self.ou_signal.get('z'))
+
         # Обновляем демо-трейдера на основе нового закрытого бара
         if self.ou_signal is not None:
             self.demo_trader.update(
@@ -554,6 +560,23 @@ class BybitDataCollector:
             'candles_count': len(self.candles_data),
             'last_price': self.last_price
         }
+
+    def get_z_history(self) -> list:
+        """Возвращает историю Z-score, выровненную по отображаемым свечам."""
+        with self._data_lock:
+            z_values = list(self.ou_z_history)
+            display_count = len(self._build_display_candles())
+            if len(z_values) < display_count:
+                # Дополняем значениями None в начало
+                z_values = [None] * (display_count - len(z_values)) + z_values
+            elif len(z_values) > display_count:
+                z_values = z_values[-display_count:]
+            return z_values
+
+    def get_trades_for_chart(self) -> list:
+        """Возвращает список завершённых сделок в виде словарей."""
+        with self._data_lock:
+            return [trade.__dict__ for trade in self.demo_trader.trades]
 
     def get_kalman_estimates(self) -> list:
         """Возвращает оценки Калмана, выровненные по числу отображаемых свечей."""
