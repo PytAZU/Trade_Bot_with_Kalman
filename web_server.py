@@ -78,6 +78,27 @@ class WebServer:
         def get_status():
             """API для получения полного статуса"""
             return jsonify(self.data_collector.get_status())
+
+        @self.app.route('/api/demo/reset', methods=['POST'])
+        def reset_demo():
+            """Сброс демо-счёта к начальному состоянию."""
+            try:
+                self.data_collector.demo_trader.reset()
+                print("🔄 Демо-счёт сброшен через веб-интерфейс")
+
+                # Отправляем всем клиентам обновлённый график и статус
+                self.broadcast_update()
+
+                return jsonify({
+                    'status': 'ok',
+                    'message': 'Демо-счёт сброшен'
+                })
+            except Exception as e:
+                print(f"❌ Ошибка сброса демо-счёта: {e}")
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
         
         @self.app.route('/api/shutdown', methods=['POST'])
         def shutdown():
@@ -177,13 +198,17 @@ class WebServer:
         z_history = self.data_collector.get_z_history()
         trades = self.data_collector.get_trades_for_chart()
 
+        demo_status = self.data_collector.get_demo_trader_status()
+        open_position = demo_status.get('position') if demo_status.get('open_position') else None
+
         chart_json = self.chart_builder.build_chart(
             display_candles,
             self.config.SYMBOL,
             self.data_collector.interval,
             kalman_estimates=kalman_estimates,
             z_history=z_history,
-            trades=trades
+            trades=trades,
+            open_position=open_position
         )
         
         last_candle = display_candles[-1]
@@ -200,7 +225,7 @@ class WebServer:
             'current_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'is_positive': last_candle['close'] >= last_candle['open'],
             'ou_status': self.data_collector.get_ou_status(),
-            'demo_status': self.data_collector.get_demo_trader_status()
+            'demo_status': demo_status
         }
         
         self.socketio.emit('chart_update', update_data)

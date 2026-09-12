@@ -186,10 +186,14 @@ class BybitDataCollector:
 
                     # Обновляем OU: spread = close - справедливая цена
                     spread = candle['close'] - fair_price
-                    self.ou.update(spread)
+                    ou_result = self.ou.update(spread)
+
+                    # Сохраняем Z-score в историю (синхронно с kalman_estimates)
+                    self.ou_z_history.append(ou_result.get('z'))
 
                 print(f"📈 Фильтр Калмана инициализирован {len(self.kalman_estimates)} оценками")
-                print(f"📊 Процесс OU обновлён на {len(self.candles_data)} исторических свечах")  
+                print(f"📊 Процесс OU обновлён на {len(self.candles_data)} исторических свечах")
+                print(f"📉 История Z-score заполнена: {len(self.ou_z_history)} значений")
         
         except Exception as e:
             print(f"❌ ОШИБКА при получении начальных данных: {e}")

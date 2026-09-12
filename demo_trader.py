@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Union
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict
+from threading import RLock
 
 
 @dataclass
@@ -75,189 +76,201 @@ class DemoTrader:
         self.win_count = 0
         self.loss_count = 0
 
+        self._lock = RLock()  # защита состояния от гонок
         self.state_file = state_file # сохранил путь
         self.load_state()  # загрузка сохраненного состояния
 
     def reset(self):
-        """Сброс всех параметров к начальным."""
-        self.balance = self.initial_balance
-        self.position = None
-        self.trades.clear()
-        self.total_pnl = 0.0
-        self.total_fees = 0.0
-        self.win_count = 0
-        self.loss_count = 0
+        with self._lock:
+            """Сброс всех параметров к начальным."""
+            self.balance = self.initial_balance
+            self.position = None
+            self.trades.clear()
+            self.total_pnl = 0.0
+            self.total_fees = 0.0
+            self.win_count = 0
+            self.loss_count = 0
+            self.save_state()
 
     def update(self, price: float, ou_status: Dict, timestamp: int) -> None:
-        """
-        Вызывается на каждой закрытой свече с текущей ценой и статусом OU.
+        with self._lock:
+            """
+            Вызывается на каждой закрытой свече с текущей ценой и статусом OU.
 
-        Args:
-            price: цена закрытия свечи
-            ou_status: словарь из OUMeanReversion.update() (содержит z, signal, theta, sigma)
-            timestamp: время закрытия свечи (мс)
-        """
-        if not ou_status.get('ready', False):
-            return  # Модель ещё не готова, не торгуем
+            Args:
+                price: цена закрытия свечи
+                ou_status: словарь из OUMeanReversion.update() (содержит z, signal, theta, sigma)
+                timestamp: время закрытия свечи (мс)
+            """
+            if not ou_status.get('ready', False):
+                return  # Модель ещё не готова, не торгуем
 
-        z = ou_status.get('z', 0.0)
-        signal = ou_status.get('signal', 'FLAT')
+            z = ou_status.get('z', 0.0)
+            signal = ou_status.get('signal', 'FLAT')
 
-        # Проверяем стоп-лосс, если позиция открыта
-        if self.position is not None:
-            if abs(z) >= self.stop_z:
-                self._close_position(price, timestamp, reason='stop')
-                return
+            # Проверяем стоп-лосс, если позиция открыта
+            if self.position is not None:
+                if abs(z) >= self.stop_z:
+                    self._close_position(price, timestamp, reason='stop')
+                    return
 
-            # Закрытие по возврату к среднему
-            if abs(z) <= self.exit_z:
-                self._close_position(price, timestamp, reason='exit')
-                return
+                # Закрытие по возврату к среднему
+                if abs(z) <= self.exit_z:
+                    self._close_position(price, timestamp, reason='exit')
+                    return
 
-            # Реверс: если сигнал противоположный и z превысил entry_z
-            if self.position['direction'] == 'BUY' and z <= -self.entry_z:
-                self._close_position(price, timestamp, reason='reverse')
-                self._open_position('SELL', price, timestamp)
-            elif self.position['direction'] == 'SELL' and z >= self.entry_z:
-                self._close_position(price, timestamp, reason='reverse')
-                self._open_position('BUY', price, timestamp)
-        else:
-            # Позиции нет, открываем при сильном отклонении
-            if z <= -self.entry_z and signal == 'BUY':
-                self._open_position('BUY', price, timestamp)
-            elif z >= self.entry_z and signal == 'SELL':
-                self._open_position('SELL', price, timestamp)
+                # Реверс: если сигнал противоположный и z превысил entry_z
+                # if self.position['direction'] == 'BUY' and z <= -self.entry_z:
+                #     self._close_position(price, timestamp, reason='reverse')
+                #     self._open_position('SELL', price, timestamp)
+                # elif self.position['direction'] == 'SELL' and z >= self.entry_z:
+                #     self._close_position(price, timestamp, reason='reverse')
+                #     self._open_position('BUY', price, timestamp)
+            else:
+                # Позиции нет, открываем при сильном отклонении
+                if z <= -self.entry_z and signal == 'BUY':
+                    self._open_position('BUY', price, timestamp)
+                elif z >= self.entry_z and signal == 'SELL':
+                    self._open_position('SELL', price, timestamp)
 
     def _open_position(self, direction: str, price: float, timestamp: int):
-        """Открывает позицию указанного направления."""
-        if self.position is not None:
-            return  # Уже есть позиция
+        with self._lock:
+            """Открывает позицию указанного направления."""
+            if self.position is not None:
+                return  # Уже есть позиция
 
-        # Применяем проскальзывание
-        exec_price = price * (1 + self.slippage) if direction == 'BUY' else price * (1 - self.slippage)
+            # Применяем проскальзывание
+            exec_price = price * (1 + self.slippage) if direction == 'BUY' else price * (1 - self.slippage)
 
-        # Рассчитываем объём: доля баланса / цена
-        risk_amount = self.balance * self.position_size_pct
-        amount = risk_amount / exec_price
+            # Рассчитываем объём: доля баланса / цена
+            risk_amount = self.balance * self.position_size_pct
+            amount = risk_amount / exec_price
 
-        # Комиссия за вход
-        fee = risk_amount * self.fee_rate
-        self.balance -= fee
-        self.total_fees += fee
+            # Комиссия за вход
+            fee = risk_amount * self.fee_rate
+            self.balance -= fee
+            self.total_fees += fee
 
-        self.position = {
-            'direction': direction,
-            'entry_price': exec_price,
-            'amount': amount,
-            'entry_time': timestamp,
-        }
+            self.position = {
+                'direction': direction,
+                'entry_price': exec_price,
+                'amount': amount,
+                'entry_time': timestamp,
+                'entry_fee': fee,
+            }
+
+            self.save_state()
 
     def _close_position(self, price: float, timestamp: int, reason: str):
-        """Закрывает текущую позицию и фиксирует сделку."""
-        if self.position is None:
-            return
+        with self._lock:
+            """Закрывает текущую позицию и фиксирует сделку."""
+            if self.position is None:
+                return
 
-        direction = self.position['direction']
-        amount = self.position['amount']
-        entry_price = self.position['entry_price']
+            direction = self.position['direction']
+            amount = self.position['amount']
+            entry_price = self.position['entry_price']
 
-        # Применяем проскальзывание в обратную сторону
-        exec_price = price * (1 - self.slippage) if direction == 'BUY' else price * (1 + self.slippage)
+            # Применяем проскальзывание в обратную сторону
+            exec_price = price * (1 - self.slippage) if direction == 'BUY' else price * (1 + self.slippage)
 
-        # PnL
-        if direction == 'BUY':
-            pnl = (exec_price - entry_price) * amount
-        else:
-            pnl = (entry_price - exec_price) * amount
+            # PnL
+            if direction == 'BUY':
+                pnl = (exec_price - entry_price) * amount
+            else:
+                pnl = (entry_price - exec_price) * amount
 
-        # Комиссия за выход
-        exit_fee = exec_price * amount * self.fee_rate
-        pnl -= exit_fee
-        self.balance += pnl
-        self.total_fees += exit_fee
-        self.total_pnl += pnl
+            # Комиссия за выход
+            exit_fee = exec_price * amount * self.fee_rate
+            pnl -= exit_fee
+            self.balance += pnl
+            self.total_fees += exit_fee
+            self.total_pnl += pnl
 
-        if pnl > 0:
-            self.win_count += 1
-        else:
-            self.loss_count += 1
+            if pnl > 0:
+                self.win_count += 1
+            else:
+                self.loss_count += 1
 
-        trade = Trade(
-            direction=direction,
-            entry_price=entry_price,
-            exit_price=exec_price,
-            entry_time=self.position['entry_time'],
-            exit_time=timestamp,
-            amount=amount,
-            pnl=pnl,
-            fee=exit_fee + self.position.get('entry_fee', 0),
-            reason=reason
-        )
-        self.trades.append(trade)
-        self.position = None
+            trade = Trade(
+                direction=direction,
+                entry_price=entry_price,
+                exit_price=exec_price,
+                entry_time=self.position['entry_time'],
+                exit_time=timestamp,
+                amount=amount,
+                pnl=pnl,
+                fee=exit_fee + self.position.get('entry_fee', 0),
+                reason=reason
+            )
+            self.trades.append(trade)
+            self.position = None
 
-        self.save_state()
+            self.save_state()
 
     def get_status(self) -> Dict:
-        """Возвращает текущее состояние демо-трейдера."""
-        return {
-            'balance': self.balance,
-            'initial_balance': self.initial_balance,
-            'position': self.position,
-            'open_position': self.position is not None,
-            'total_pnl': self.total_pnl,
-            'total_fees': self.total_fees,
-            'win_count': self.win_count,
-            'loss_count': self.loss_count,
-            'trades_count': len(self.trades),
-            'trades': [trade.__dict__ for trade in self.trades]
-        }
+        with self._lock:
+            """Возвращает текущее состояние демо-трейдера."""
+            return {
+                'balance': self.balance,
+                'initial_balance': self.initial_balance,
+                'position': self.position,
+                'open_position': self.position is not None,
+                'total_pnl': self.total_pnl,
+                'total_fees': self.total_fees,
+                'win_count': self.win_count,
+                'loss_count': self.loss_count,
+                'trades_count': len(self.trades),
+                'trades': [trade.__dict__ for trade in self.trades]
+            }
 
     def save_state(self) -> None:
-        """Сохраняет текущее состояние в JSON-файл."""
-        state = {
-            'balance': self.balance,
-            'initial_balance': self.initial_balance,
-            'total_pnl': self.total_pnl,
-            'total_fees': self.total_fees,
-            'win_count': self.win_count,
-            'loss_count': self.loss_count,
-            'trades_count': len(self.trades),
-            'trades': [trade.__dict__ for trade in self.trades],
-            'position': self.position,
-        }
-        try:
-            Path(self.state_file).write_text(
-                json.dumps(state, indent=2, default=str),
-                encoding='utf-8'
-            )
-        except Exception as e:
-            print(f"❌ Ошибка сохранения состояния демо-трейдера: {e}")
+        with self._lock:
+            """Сохраняет текущее состояние в JSON-файл."""
+            state = {
+                'balance': self.balance,
+                'initial_balance': self.initial_balance,
+                'total_pnl': self.total_pnl,
+                'total_fees': self.total_fees,
+                'win_count': self.win_count,
+                'loss_count': self.loss_count,
+                'trades_count': len(self.trades),
+                'trades': [trade.__dict__ for trade in self.trades],
+                'position': self.position,
+            }
+            try:
+                Path(self.state_file).write_text(
+                    json.dumps(state, indent=2, default=str),
+                    encoding='utf-8'
+                )
+            except Exception as e:
+                print(f"❌ Ошибка сохранения состояния демо-трейдера: {e}")
 
     def load_state(self) -> None:
-        """Загружает состояние из файла, если он существует."""
-        path = Path(self.state_file)
-        if not path.exists():
-            print("ℹ️ Файл состояния демо-трейдера не найден, стартуем с нуля.")
-            return
+        with self._lock:
+            """Загружает состояние из файла, если он существует."""
+            path = Path(self.state_file)
+            if not path.exists():
+                print("ℹ️ Файл состояния демо-трейдера не найден, стартуем с нуля.")
+                return
 
-        try:
-            state = json.loads(path.read_text(encoding='utf-8'))
-            self.balance = state.get('balance', self.initial_balance)
-            self.total_pnl = state.get('total_pnl', 0.0)
-            self.total_fees = state.get('total_fees', 0.0)
-            self.win_count = state.get('win_count', 0)
-            self.loss_count = state.get('loss_count', 0)
-            self.position = state.get('position', None)
+            try:
+                state = json.loads(path.read_text(encoding='utf-8'))
+                self.balance = state.get('balance', self.initial_balance)
+                self.total_pnl = state.get('total_pnl', 0.0)
+                self.total_fees = state.get('total_fees', 0.0)
+                self.win_count = state.get('win_count', 0)
+                self.loss_count = state.get('loss_count', 0)
+                self.position = state.get('position', None)
 
-            # Восстанавливаем сделки
-            self.trades.clear()
-            for trade_data in state.get('trades', []):
-                try:
-                    trade = Trade(**trade_data)
-                    self.trades.append(trade)
-                except Exception as e:
-                    print(f"⚠️ Пропущена некорректная запись сделки: {e}")
-            print(f"✅ Состояние демо-трейдера загружено: баланс={self.balance:.2f}, сделок={len(self.trades)}")
-        except Exception as e:
-            print(f"❌ Ошибка загрузки состояния демо-трейдера: {e}")
+                # Восстанавливаем сделки
+                self.trades.clear()
+                for trade_data in state.get('trades', []):
+                    try:
+                        trade = Trade(**trade_data)
+                        self.trades.append(trade)
+                    except Exception as e:
+                        print(f"⚠️ Пропущена некорректная запись сделки: {e}")
+                print(f"✅ Состояние демо-трейдера загружено: баланс={self.balance:.2f}, сделок={len(self.trades)}")
+            except Exception as e:
+                print(f"❌ Ошибка загрузки состояния демо-трейдера: {e}")

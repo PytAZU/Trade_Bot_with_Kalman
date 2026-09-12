@@ -352,8 +352,8 @@ class ChartBuilder:
 
     def _add_z_score_hover_trace(self, fig, x, y, z_values):
         """Добавляет невидимый трейс, который показывает Z-score в hover."""
-        # Используем closes как y-координаты (чтобы точки совпадали с графиком)
-        hovertemplate = 'Z-score: %{customdata:.2f}<extra></extra>'
+        # Приводим z_values к плоскому списку чисел (None → NaN для Plotly)
+        z_clean = [z if z is not None else float('nan') for z in z_values]
 
         fig.add_trace(
             go.Scatter(
@@ -361,11 +361,10 @@ class ChartBuilder:
                 y=y,
                 mode='markers',
                 marker=dict(size=0, opacity=0),
-                customdata=np.array(z_values).reshape(-1, 1),
-                hovertemplate=hovertemplate,
+                customdata=z_clean,
+                hovertemplate='Z-score: %{customdata:.2f}<extra></extra>',
                 showlegend=False,
-                hoverinfo='text',
-                text=[f"Z-score: {z:.2f}" if z is not None else "Z-score: --" for z in z_values],
+                name='Z-score',
                 uid='z-score-hover'
             ),
             row=1, col=1

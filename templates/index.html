@@ -203,6 +203,27 @@
             font-family: 'Courier New', monospace;
             color: #ffffff;
         }
+        .btn-reset {
+            padding: 6px 14px;
+            border: 1px solid rgba(255, 170, 0, 0.5);
+            border-radius: 6px;
+            background: rgba(255, 170, 0, 0.15);
+            color: #ffaa00;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-reset:hover {
+            background: rgba(255, 170, 0, 0.3);
+            border-color: #ffaa00;
+        }
+        .btn-reset:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .demo-trades-title {
             font-size: 14px;
             color: #aaa;
@@ -298,7 +319,12 @@
         <div class="demo-panel">
             <div class="demo-header">
                 <span class="demo-title">📊 Демо-трейдер</span>
-                <span class="demo-status" id="demoStatus">Нет данных</span>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <span class="demo-status" id="demoStatus">Нет данных</span>
+                    <button class="btn-reset" id="resetDemoButton" onclick="resetDemoTrader()">
+                        ↺ Сброс
+                    </button>
+                </div>
             </div>
             <div class="demo-cards">
                 <div class="demo-card">
@@ -490,6 +516,33 @@
                 updateDemoPanel(data.demo_status);
             }
         });
+
+        function resetDemoTrader() {
+            if (!confirm('Сбросить демо-счёт?\n\nБаланс вернётся к 10000 USDT, история сделок и открытая позиция будут очищены.')) {
+                return;
+            }
+
+            const btn = document.getElementById('resetDemoButton');
+            btn.disabled = true;
+            btn.textContent = '⏳ ...';
+
+            fetch('/api/demo/reset', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Сброс демо-счёта:', data);
+                    if (data.status !== 'ok') {
+                        alert('Ошибка сброса: ' + (data.message || 'неизвестная ошибка'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка запроса сброса:', error);
+                    alert('Ошибка сети при сбросе демо-счёта');
+                })
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = '↺ Сброс';
+                });
+        }
 
         function updateDemoPanel(demo) {
             document.getElementById('demoBalance').textContent = '$' + demo.balance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
