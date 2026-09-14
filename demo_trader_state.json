@@ -1,11 +1,11 @@
 {
-  "balance": 9999.081564968743,
+  "balance": 10000.348199892194,
   "initial_balance": 10000.0,
-  "total_pnl": -0.3184350312572353,
-  "total_fees": 1.200169040405489,
-  "win_count": 0,
+  "total_pnl": 1.5481447860922435,
+  "total_fees": 2.3985798007914356,
+  "win_count": 1,
   "loss_count": 1,
-  "trades_count": 1,
+  "trades_count": 2,
   "trades": [
     {
       "direction": "BUY",
@@ -16,6 +16,17 @@
       "amount": 0.01295059643459036,
       "pnl": -0.3184350312572353,
       "fee": 1.200169040405489,
+      "reason": "exit"
+    },
+    {
+      "direction": "SELL",
+      "entry_price": 78836.01561,
+      "exit_price": 78641.66338,
+      "entry_time": 1789402680000,
+      "exit_time": 1789403820000,
+      "amount": 0.012683392847291999,
+      "pnl": 1.8665798173494788,
+      "fee": 1.1984107603859466,
       "reason": "exit"
     }
   ],
