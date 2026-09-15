@@ -16,10 +16,14 @@ class Config:
     TIMEFRAME = 1               # Таймфрейм в минутах
     MAX_CANDLES = 100           # Количество отображаемых свечей
     
-    # WebSocket эндпоинты Bybit
+    # WebSocket эндпоинты Bybit (пока используются как дефолт для спота;
+    # в шаге 2 будут браться из market_mode.py)
     BYBIT_WS_MAIN = "wss://stream.bybit.com/v5/public/spot"
     BYBIT_WS_TESTNET = "wss://stream-testnet.bybit.com/v5/public/spot"
     BYBIT_REST_API = "https://api.bybit.com/v5/market"
+
+    # Торговый режим по умолчанию при старте: "spot" или "futures"
+    DEFAULT_MARKET_MODE = "spot"
     
     # Настройки Flask сервера
     FLASK_HOST = "0.0.0.0"
@@ -51,7 +55,7 @@ class Config:
     # Параметры процесса Орнштейна-Уленбека
     OU_WINDOW = 200              # максимальная длина буфера спреда
     OU_MIN_OBS = 50              # минимальное количество наблюдений для оценки модели
-    OU_ENTRY_Z = 2.8             # порог z-score для входа (абсолютное значение)
+    OU_ENTRY_Z = 2.4             # порог z-score для входа (абсолютное значение)
     OU_EXIT_Z = 0.2              # порог z-score для выхода (возврат к среднему)
     OU_STOP_Z = 4.5              # порог z-score для принудительного стоп-лосса
     OU_DELTA_T = 1.0             # интервал времени между свечами (обычно 1)
@@ -61,7 +65,7 @@ class Config:
     DEMO_POSITION_SIZE_PCT = 0.1      # доля баланса на одну позицию (10%)
     DEMO_FEE_RATE = 0.0006            # комиссия за сторону (0.06%)
     DEMO_SLIPPAGE = 0.0001            # проскальзывание (0.01%)
-    DEMO_ENTRY_Z = 2.8                # порог z-score для входа
+    DEMO_ENTRY_Z = 2.4                # порог z-score для входа
     DEMO_EXIT_Z = 0.2                 # порог z-score для выхода
     DEMO_STOP_Z = 4.5                 # порог z-score для стоп-лосса
 

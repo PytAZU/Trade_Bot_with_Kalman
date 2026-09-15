@@ -44,6 +44,7 @@ class DemoTrader:
                  entry_z: float = 2.0,
                  exit_z: float = 0.5,
                  stop_z: float = 3.5,
+                 leverage: float = 1.0,
                  state_file: str = "demo_trader_state.json"):
         """
         Args:
@@ -63,6 +64,7 @@ class DemoTrader:
         self.entry_z = entry_z
         self.exit_z = exit_z
         self.stop_z = stop_z
+        self.leverage = leverage
 
         # Текущая открытая позиция
         self.position: Optional[Dict] = None   # {direction, entry_price, amount, entry_time}
@@ -90,6 +92,13 @@ class DemoTrader:
             self.total_fees = 0.0
             self.win_count = 0
             self.loss_count = 0
+            self.save_state()
+
+    def set_leverage(self, leverage: float):
+        """Устанавливает кредитное плечо и сохраняет состояние."""
+        with self._lock:
+            leverage = max(1.0, min(10.0, float(leverage)))
+            self.leverage = leverage
             self.save_state()
 
     def update(self, price: float, ou_status: Dict, timestamp: int) -> None:
@@ -142,8 +151,9 @@ class DemoTrader:
             # Применяем проскальзывание
             exec_price = price * (1 + self.slippage) if direction == 'BUY' else price * (1 - self.slippage)
 
-            # Рассчитываем объём: доля баланса / цена
-            risk_amount = self.balance * self.position_size_pct
+            # Объём = доля баланса × плечо / цена входа.
+            # Для спота leverage = 1.0 → поведение не меняется.
+            risk_amount = self.balance * self.position_size_pct * self.leverage
             amount = risk_amount / exec_price
 
             # Комиссия за вход
@@ -214,6 +224,7 @@ class DemoTrader:
             return {
                 'balance': self.balance,
                 'initial_balance': self.initial_balance,
+                'leverage': self.leverage,
                 'position': self.position,
                 'open_position': self.position is not None,
                 'total_pnl': self.total_pnl,
@@ -230,6 +241,7 @@ class DemoTrader:
             state = {
                 'balance': self.balance,
                 'initial_balance': self.initial_balance,
+                'leverage': self.leverage,
                 'total_pnl': self.total_pnl,
                 'total_fees': self.total_fees,
                 'win_count': self.win_count,
@@ -257,6 +269,7 @@ class DemoTrader:
             try:
                 state = json.loads(path.read_text(encoding='utf-8'))
                 self.balance = state.get('balance', self.initial_balance)
+                self.leverage = state.get('leverage', self.leverage)
                 self.total_pnl = state.get('total_pnl', 0.0)
                 self.total_fees = state.get('total_fees', 0.0)
                 self.win_count = state.get('win_count', 0)

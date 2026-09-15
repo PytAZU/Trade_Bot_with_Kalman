@@ -69,7 +69,7 @@ class WebServer:
                 'low_24h': self.data_collector.low_24h,
                 'volume_24h': self.data_collector.volume_24h,
                 'last_price': self.data_collector.last_price,
-                'candles_count': len(self.data_collector.candles_data),
+                'candles_count': len(self.data_collector.session.candles_data),
                 'is_connected': self.data_collector.is_connected,
                 'timestamp': datetime.now().isoformat()
             })
@@ -78,6 +78,97 @@ class WebServer:
         def get_status():
             """API для получения полного статуса"""
             return jsonify(self.data_collector.get_status())
+
+        @self.app.route('/api/market/switch', methods=['POST'])
+        def switch_market():
+            """Переключение торгового режима (spot ↔ futures)."""
+            try:
+                payload = request.get_json(silent=True) or {}
+                mode_key = payload.get('mode')
+
+                if not mode_key:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Field "mode" is required'
+                    }), 400
+
+                self.data_collector.switch_market(mode_key)
+
+                # Уведомляем всех клиентов о смене режима
+                self.socketio.emit('market_changed', {
+                    'mode': mode_key,
+                    'display_name': self.data_collector.active_mode.display_name,
+                    'leverage': self.data_collector.session.demo_trader.leverage,
+                })
+
+                # Сразу отправляем обновлённый график
+                self.broadcast_update()
+
+                return jsonify({
+                    'status': 'ok',
+                    'mode': mode_key,
+                })
+
+            except ValueError as e:
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 400
+            except Exception as e:
+                print(f"❌ Ошибка переключения режима: {e}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
+
+        @self.app.route('/api/market/leverage', methods=['POST'])
+        def set_leverage():
+            """Установка кредитного плеча для активного режима."""
+            try:
+                payload = request.get_json(silent=True) or {}
+                value = payload.get('leverage')
+
+                if value is None:
+                    return jsonify({
+                        'status': 'error',
+                        'message': 'Field "leverage" is required'
+                    }), 400
+
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    return jsonify({
+                        'status': 'error',
+                        'message': '"leverage" must be a number'
+                    }), 400
+
+                # Ограничения: 1..10 для фьючерсов, всегда 1.0 для спота
+                if self.data_collector.active_mode.key == 'spot':
+                    value = 1.0
+
+                self.data_collector.set_leverage(value)
+
+                # Оповещаем всех клиентов
+                self.socketio.emit('leverage_changed', {
+                    'leverage': self.data_collector.session.demo_trader.leverage,
+                    'mode': self.data_collector.active_mode.key,
+                })
+
+                return jsonify({
+                    'status': 'ok',
+                    'leverage': self.data_collector.session.demo_trader.leverage,
+                })
+
+            except Exception as e:
+                print(f"❌ Ошибка установки плеча: {e}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500
 
         @self.app.route('/api/demo/reset', methods=['POST'])
         def reset_demo():
@@ -176,7 +267,7 @@ class WebServer:
                 'high_24h': self.data_collector.high_24h,
                 'low_24h': self.data_collector.low_24h,
                 'volume_24h': self.data_collector.volume_24h,
-                'candles_count': len(self.data_collector.candles_data),
+                'candles_count': len(self.data_collector.session.candles_data),
                 'current_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'is_positive': last_candle['close'] >= last_candle['open'],
                 'ou_status': self.data_collector.get_ou_status(),
@@ -221,7 +312,7 @@ class WebServer:
             'high_24h': self.data_collector.high_24h,
             'low_24h': self.data_collector.low_24h,
             'volume_24h': self.data_collector.volume_24h,
-            'candles_count': len(self.data_collector.candles_data),
+            'candles_count': len(self.data_collector.session.candles_data),
             'current_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'is_positive': last_candle['close'] >= last_candle['open'],
             'ou_status': self.data_collector.get_ou_status(),

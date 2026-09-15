@@ -255,6 +255,142 @@
         }
         .demo-trade-direction-buy { color: #00ff88; }
         .demo-trade-direction-sell { color: #ff4444; }
+
+                /* ---- Toggle switch: Spot / Futures ---- */
+        .market-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 14px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        .market-label {
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #666;
+            transition: color 0.25s ease, text-shadow 0.25s ease;
+            user-select: none;
+        }
+        .market-label.active {
+            color: #00ff88;
+            text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .switch .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: background 0.3s ease, border-color 0.3s ease;
+            border-radius: 24px;
+        }
+        .switch .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            top: 2px;
+            background: #ffffff;
+            transition: transform 0.3s ease, background 0.3s ease;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .switch input:checked + .slider {
+            background: linear-gradient(135deg, #ffaa00, #ff6600);
+            border-color: rgba(255, 170, 0, 0.6);
+        }
+        .switch input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+        .switch input:disabled + .slider {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .switch input:disabled + .slider:before {
+            cursor: not-allowed;
+        }
+
+        /* ---- Ползунок плеча ---- */
+        .leverage-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 14px;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            transition: opacity 0.25s ease;
+        }
+        .leverage-control.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        .leverage-label {
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #888;
+        }
+        .leverage-value {
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            font-weight: bold;
+            color: #ffaa00;
+            min-width: 42px;
+            text-align: right;
+        }
+        #leverageSlider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 120px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        #leverageSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ffaa00;
+            border: 2px solid #1a1a2e;
+            box-shadow: 0 0 6px rgba(255, 170, 0, 0.6);
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        #leverageSlider::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        #leverageSlider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ffaa00;
+            border: 2px solid #1a1a2e;
+            box-shadow: 0 0 6px rgba(255, 170, 0, 0.6);
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -282,6 +418,21 @@
             </div>
         </div>
         <div class="controls">
+            <div class="market-toggle">
+                <span class="market-label" id="labelSpot">Spot</span>
+                <label class="switch">
+                    <input type="checkbox" id="marketSwitch" onchange="switchMarket(this.checked)">
+                    <span class="slider"></span>
+                </label>
+                <span class="market-label" id="labelFutures">Futures</span>
+            </div>
+            <div class="leverage-control" id="leverageControl">
+                <span class="leverage-label">Плечо:</span>
+                <input type="range" id="leverageSlider" min="1" max="10" step="1" value="1"
+                       oninput="onLeverageSliderInput(this.value)"
+                       onchange="onLeverageSliderChange(this.value)">
+                <span class="leverage-value" id="leverageValue">1x</span>
+            </div>
             <div class="price-container">
                 <div class="last-price" id="lastPrice">--</div>
                 <div class="price-change" id="priceChange">--</div>
@@ -447,6 +598,96 @@
             }
         }
         
+        // ---- Переключение торгового режима (Spot / Futures) ----
+
+        function updateMarketToggleUI(mode) {
+            const isFutures = mode === 'futures';
+            const checkbox = document.getElementById('marketSwitch');
+            checkbox.checked = isFutures;
+
+            document.getElementById('labelSpot').classList.toggle('active', !isFutures);
+            document.getElementById('labelFutures').classList.toggle('active', isFutures);
+
+            // Плечо актуально только для фьючерсов. На споте блокируем.
+            const levControl = document.getElementById('leverageControl');
+            if (isFutures) {
+                levControl.classList.remove('disabled');
+            } else {
+                levControl.classList.add('disabled');
+                // Принудительно сбрасываем UI на 1x для спота
+                document.getElementById('leverageSlider').value = 1;
+                document.getElementById('leverageValue').textContent = '1x';
+            }
+        }
+
+        function updateLeverageUI(leverage) {
+            const lev = Math.max(1, Math.min(10, Math.round(leverage)));
+            document.getElementById('leverageSlider').value = lev;
+            document.getElementById('leverageValue').textContent = lev + 'x';
+        }
+
+        function onLeverageSliderInput(value) {
+            // Мгновенно обновляем подпись при движении ползунка
+            document.getElementById('leverageValue').textContent = value + 'x';
+        }
+
+        function onLeverageSliderChange(value) {
+            const lev = parseInt(value, 10);
+
+            fetch('/api/market/leverage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leverage: lev })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status !== 'ok') {
+                        console.error('Ошибка установки плеча:', data);
+                        alert('Не удалось установить плечо: ' + (data.message || 'неизвестная ошибка'));
+                    } else {
+                        console.log('Плечо установлено:', data.leverage);
+                    }
+                })
+                .catch(err => {
+                    console.error('Ошибка сети при установке плеча:', err);
+                });
+        }
+
+        function switchMarket(isFutures) {
+            const mode = isFutures ? 'futures' : 'spot';
+            const checkbox = document.getElementById('marketSwitch');
+            const previousMode = isFutures ? 'spot' : 'futures';
+
+            // Блокируем toggle на время запроса
+            checkbox.disabled = true;
+            updateMarketToggleUI(mode);  // сразу визуально переключаем
+
+            fetch('/api/market/switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: mode })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status !== 'ok') {
+                        // Откат UI при ошибке
+                        console.error('Ошибка переключения режима:', data);
+                        updateMarketToggleUI(previousMode);
+                        alert('Не удалось переключить режим: ' + (data.message || 'неизвестная ошибка'));
+                    } else {
+                        console.log('Режим переключён на', mode);
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка запроса переключения:', error);
+                    updateMarketToggleUI(previousMode);
+                    alert('Ошибка сети при переключении режима');
+                })
+                .finally(() => {
+                    checkbox.disabled = false;
+                });
+        }
+
         function shutdownServer() {
             if (confirm('Вы уверены, что хотите остановить сервер?\n\nВсе соединения будут закрыты, программа завершит работу.')) {
                 const btn = document.getElementById('stopButton');
@@ -605,6 +846,44 @@
         window.addEventListener('resize', function() {
             if (chartRendered) Plotly.Plots.resize('chart');
         });
+
+        socket.on('market_changed', function(data) {
+            console.log('Режим изменён на:', data.mode, data.display_name);
+            updateMarketToggleUI(data.mode);
+
+            // Обновляем плечо с сервера (у нового режима оно может быть другим)
+            if (data.leverage !== undefined) {
+                updateLeverageUI(data.leverage);
+            }
+
+            // Сбрасываем состояние клиента, чтобы график построился с нуля
+            chartRendered = false;
+            lastOuStatus = null;
+
+            // Очищаем поле открытой позиции — она относится к другому режиму
+            document.getElementById('demoPosition').textContent = '--';
+            document.getElementById('demoPosition').style.color = '#aaa';
+        });
+
+        socket.on('leverage_changed', function(data) {
+            console.log('Плечо изменено:', data.leverage, '(', data.mode, ')');
+            // Синхронизируем UI, если изменение пришло от другого клиента
+            updateLeverageUI(data.leverage);
+        });
+
+        // Определяем текущий режим и плечо при загрузке страницы
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.market_mode) {
+                    updateMarketToggleUI(data.market_mode);
+                }
+                if (data.leverage !== undefined) {
+                    updateLeverageUI(data.leverage);
+                }
+            })
+            .catch(err => console.error('Не удалось получить статус:', err));
+
     </script>
 </body>
 </html>
