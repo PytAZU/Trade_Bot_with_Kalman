@@ -8,9 +8,12 @@ MarketSession. Активный режим определяется self.active_
 """
 
 import asyncio
+import io
 import json
 import time
 import ssl
+import sys
+from contextlib import redirect_stdout
 from datetime import datetime
 from threading import RLock
 import websockets
@@ -48,6 +51,12 @@ class BybitDataCollector:
         self.websocket = None
         self.ws_loop = None  # event loop WS-потока (для закрытия сокета из другого потока)
 
+        # ---- Прогресс-бар в консоли ----
+        self._tick_count = 0
+        self._last_bar = ""
+        self._last_info = ""
+        self._progress_initialized = False
+
         # ---- Блокировка состояния (общая для всех сессий) ----
         self._data_lock = RLock()
 
@@ -72,7 +81,50 @@ class BybitDataCollector:
         self.fetch_24h_stats()
 
 
-    
+    def _render_console_progress(self, bar_str: str, info_str: str):
+        """
+        Рисует бар и инфо на месте. Строки не добавляются, не удаляются
+        и не смещают то, что находится ниже.
+        """
+        self._last_bar = bar_str
+        self._last_info = info_str
+
+        if not self._progress_initialized:
+            sys.stdout.write(bar_str + '\n')
+            sys.stdout.write(info_str)
+            sys.stdout.flush()
+            self._progress_initialized = True
+            return
+
+        # Курсор сейчас в конце инфо-строки.
+        # Стереть инфо-строку, перейти на строку бара, стереть её.
+        sys.stdout.write('\r\033[2K')
+        sys.stdout.write('\033[A\r\033[2K')
+        # Печатаем заново: бар, затем инфо. Курсор остаётся в конце инфо.
+        sys.stdout.write(bar_str + '\n')
+        sys.stdout.write(info_str)
+        sys.stdout.flush()
+
+
+    def _log_console_message(self, msg: str):
+        """
+        Печатает сообщение трейдера ниже блока с прогрессом.
+        Блок (бар + инфо) предварительно стирается и печатается заново
+        ПОД сообщением, чтобы оно оставалось внизу и не перерисовывалось.
+        """
+        if not self._progress_initialized:
+            print(msg)
+            return
+
+        # Стереть инфо-строку и строку бара.
+        sys.stdout.write('\r\033[2K')
+        sys.stdout.write('\033[A\r\033[2K')
+        # Печатаем сообщение + перенос (оно теперь на месте старой строки бара).
+        sys.stdout.write(msg + '\n')
+        # Печатаем бар и инфо заново.
+        sys.stdout.write(self._last_bar + '\n')
+        sys.stdout.write(self._last_info)
+        sys.stdout.flush()
 
     # ---------- Удобный доступ к активной сессии ----------
 
@@ -508,14 +560,26 @@ class BybitDataCollector:
         """Внутреннее обновление свечи (вызывать под _data_lock)."""
         session = self.session
 
+        is_new_candle = (session.last_candle_time is None or timestamp > session.last_candle_time)
+        if is_new_candle:
+            self._tick_count = 0
+
+        self._tick_count += 1
+
+        bar_str = '[' + '|' * self._tick_count + ']'
+
         time_str = datetime.fromtimestamp(timestamp/1000).strftime('%H:%M:%S')
         change = close_price - open_price
         change_percent = (change / open_price) * 100 if open_price > 0 else 0
         status = "ЗАКРЫТА" if confirm else "ФОРМИРУЕТСЯ"
 
-        print(f"🕯️ СВЕЧА [{status}] {time_str} "
-              f"O:{open_price:.2f} H:{high_price:.2f} L:{low_price:.2f} C:{close_price:.2f} "
-              f"Vol:{volume:.4f} ({change:+.2f} / {change_percent:+.2f}%)")
+        info_str = (
+            f"🕯️ СВЕЧА [{status}] {time_str} "
+            f"O:{open_price:.2f} H:{high_price:.2f} L:{low_price:.2f} C:{close_price:.2f} "
+            f"Vol:{volume:.4f} ({change:+.2f} / {change_percent:+.2f}%)"
+        )
+
+        self._render_console_progress(bar_str, info_str)
 
         candle_data = {
             'timestamp': timestamp,
@@ -526,9 +590,6 @@ class BybitDataCollector:
             'volume': volume,
             'confirm': confirm,
         }
-
-        # Признак новой свечи ДО мутации last_candle_time
-        is_new_candle = (session.last_candle_time is None or timestamp > session.last_candle_time)
 
         if is_new_candle:
             self._finalize_candle(session.current_candle)
@@ -576,11 +637,19 @@ class BybitDataCollector:
             session.ou_z_history.append(session.ou_signal.get('z'))
 
         if session.ou_signal is not None:
-            session.demo_trader.update(
-                candle['close'],
-                session.ou_signal,
-                candle['timestamp'],
-            )
+            # Перехватываем print из demo_trader, чтобы вывести сообщения
+            # не в произвольное место консоли, а строго под блоком прогресса.
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                session.demo_trader.update(
+                    candle,
+                    session.ou_signal,
+                    candle['timestamp'],
+                )
+            captured = buf.getvalue()
+            if captured.strip():
+                for line in captured.strip().split('\n'):
+                    self._log_console_message(line)
 
     # ---------- Получение данных для отображения ----------
 

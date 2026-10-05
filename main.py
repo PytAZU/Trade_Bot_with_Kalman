@@ -15,6 +15,22 @@ from chart_builder import ChartBuilder
 from web_server import WebServer
 from template_manager import TemplateManager
 
+def _enable_windows_vt_mode():
+    """Включает VT-режим в Windows-консоли для ANSI-последовательностей."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # STD_OUTPUT_HANDLE = -11
+            handle = kernel32.GetStdHandle(-11)
+            # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            mode = ctypes.c_uint32()
+            kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+            kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+        except Exception:
+            pass
+
+
 class Application:
     """Главный класс приложения, объединяющий все компоненты"""
     
@@ -107,6 +123,7 @@ class Application:
     
     def run(self):
         """Запуск приложения"""
+        _enable_windows_vt_mode()
         print("=" * 70)
         print("🚀 Запуск приложения")
         print("=" * 70)

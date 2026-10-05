@@ -74,6 +74,20 @@ class MarketSession:
             exit_z=config.DEMO_EXIT_Z,
             stop_z=config.DEMO_STOP_Z,
             leverage=mode.leverage,
+            # maker/taker
+            fee_rate_taker=config.DEMO_FEE_RATE_TAKER,
+            fee_rate_maker=config.DEMO_FEE_RATE_MAKER,
+            maker_enabled=config.DEMO_MAKER_ENABLED,
+            maker_offset=config.DEMO_MAKER_OFFSET,
+            maker_timeout_candles=config.DEMO_MAKER_TIMEOUT_CANDLES,
+            # time-stop / trailing по z
+            max_position_minutes=config.DEMO_MAX_POSITION_MINUTES,
+            trailing_activation_z=config.DEMO_TRAILING_ACTIVATION_Z,
+            trailing_reversal_z=config.DEMO_TRAILING_REVERSAL_Z,
+            # новые стопы по цене
+            price_stop_pct=config.DEMO_PRICE_STOP_PCT,
+            price_trailing_pct=config.DEMO_PRICE_TRAILING_PCT,
+            # state
             state_file=mode.state_file,
         )
 

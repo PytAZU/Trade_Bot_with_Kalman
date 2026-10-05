@@ -8,5 +8,6 @@
   "loss_count": 0,
   "trades_count": 0,
   "trades": [],
-  "position": null
+  "position": null,
+  "pending_order": null
 }

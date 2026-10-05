@@ -114,22 +114,20 @@ class OUMeanReversion:
         sigma_eta = float(np.std(residuals, ddof=1)) if len(residuals) > 1 else 0.0
         self.sigma = sigma_eta / np.sqrt(self.delta_t) if self.delta_t > 0 else sigma_eta
 
-        # Стационарная дисперсия процесса OU: Var = sigma^2 / (2*theta)
-        if self.theta > 0 and self.sigma > 0:
-            stat_var = self.sigma ** 2 / (2 * self.theta)
+        # Стационарная дисперсия AR(1): Var = sigma_eta^2 / (1 - phi^2).
+        # Корректно для дискретной AR(1)-модели, которую мы используем,
+        # в отличие от непрерывной формулы sigma^2 / (2*theta).
+        if abs(phi) < 1.0 and self.sigma > 0:
+            stat_var = (self.sigma ** 2) / (1 - phi ** 2)
             stat_std = np.sqrt(stat_var)
         else:
             stat_std = 0.0
 
-        """
-        Классически z-score считается как (spread - self.mu) / stat_std
-        Если mu не равен нулю, то при spread = 0 (прямо на линии Калмана) 
-        z-score будет равен -mu / stat_std, что не равно нулю. 
-        Это противоречит ожиданию, что на справедливой цене z-score должен быть нулевым.
-        """
-        # Текущий z-score
+        # z-score относительно равновесного среднего mu.
+        # На линии Калмана (spread = 0) z = -mu / stat_std, что показывает
+        # систематическое смещение оценки Калмана от реального равновесия.
         if stat_std > 0:
-            self.current_z = spread / stat_std
+            self.current_z = (spread - self.mu) / stat_std
         else:
             self.current_z = 0.0
         

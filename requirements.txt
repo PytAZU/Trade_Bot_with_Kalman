@@ -1,0 +1,12 @@
+# Зависимости проекта Bybit Realtime Chart
+# Установка: pip install -r requirements.txt
+# Версии — минимально проверенные в рабочей среде (Python 3.13).
+
+Flask>=3.1.1
+Flask-SocketIO>=5.6.1
+plotly>=6.9.0
+websockets>=17.0.1
+requests>=2.34.2
+numpy>=2.2.6
+certifi>=2026.7.22
+urllib3>=2.7.0

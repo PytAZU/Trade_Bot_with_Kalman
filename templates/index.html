@@ -532,6 +532,7 @@
             const z = formatOuValue(ou.z, 2);
             const theta = formatOuValue(ou.theta, 4);
             const sigma = formatOuValue(ou.sigma, 2);
+            const mu = formatOuValue(ou.mu, 2);
             const signal = ou.signal || '--';
 
             return {
@@ -545,6 +546,7 @@
                 text: (
                     '<b>OU</b>&nbsp;&nbsp;' +
                     'Z: ' + z + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
+                    'μ: ' + mu + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
                     'Signal: ' + signal + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
                     'θ: ' + theta + '&nbsp;&nbsp;|&nbsp;&nbsp;' +
                     'σ: ' + sigma
