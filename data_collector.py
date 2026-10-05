@@ -63,6 +63,9 @@ class BybitDataCollector:
         # ---- Флаг запроса на переключение режима (используется в шаге 5) ----
         self._reconnect_requested = False
 
+        # ---- Флаг «идёт загрузка истории» — блокирует приём WS-данных ----
+        self._loading_history = False
+
         # ---- Сессии для каждого режима ----
         self.sessions = {
             key: MarketSession(mode, config)
@@ -126,6 +129,28 @@ class BybitDataCollector:
         sys.stdout.write(self._last_info)
         sys.stdout.flush()
 
+
+    def _reset_console_layout(self):
+        """
+        Стирает строки прогресс-бара и инфо из консоли и сбрасывает
+        внутреннее состояние. Следующее сообщение будет напечатано
+        на освободившемся месте, а не поверх старых строк.
+        """
+        if self._progress_initialized:
+            # Курсор сейчас в конце инфо-строки (последняя строка блока).
+            # Стираем инфо-строку.
+            sys.stdout.write('\r\033[2K')
+            # Поднимаемся на строку бара и стираем её.
+            sys.stdout.write('\033[A\r\033[2K')
+            # Курсор теперь в начале строки, где был бар.
+            # Дальше любой print() начнёт с этой позиции.
+            sys.stdout.flush()
+
+        self._progress_initialized = False
+        self._tick_count = 0
+        self._last_bar = ""
+        self._last_info = ""
+    
     # ---------- Удобный доступ к активной сессии ----------
 
     @property
@@ -147,6 +172,7 @@ class BybitDataCollector:
                 "limit": self.max_candles,
             }
 
+            self._reset_console_layout()
             print(f"\n{'='*60}")
             print(f"📡 ЗАПРОС ИСТОРИЧЕСКИХ ДАННЫХ [{self.active_mode.display_name}]")
             print(f"{'='*60}")
@@ -270,6 +296,7 @@ class BybitDataCollector:
                 self.volume_24h = float(ticker.get("volume24h", 0))
                 self.last_price = float(ticker.get("lastPrice", 0))
 
+                self._reset_console_layout()
                 print(f"📊 24Ч СТАТИСТИКА [{self.active_mode.display_name}]:")
                 print(f"  Максимум: ${self.high_24h:,.2f}")
                 print(f"  Минимум:  ${self.low_24h:,.2f}")
@@ -297,6 +324,7 @@ class BybitDataCollector:
             print(f"ℹ️ Режим '{mode_key}' уже активен")
             return
 
+        self._reset_console_layout()
         print(f"\n{'='*60}")
         print(f"🔄 ПЕРЕКЛЮЧЕНИЕ РЕЖИМА: {self.active_mode.key} → {mode_key}")
         print(f"{'='*60}")
@@ -305,23 +333,28 @@ class BybitDataCollector:
             # 1. Сохраняем DemoTrader текущей сессии
             self.session.demo_trader.save_state()
 
-            # 2. Флаг: блокируем приём данных и просим WS-цикл переподключиться
+            # 2. Ставим ОБА флага: блокируем приём данных и просим WS переподключиться
             self._reconnect_requested = True
+            self._loading_history = True
 
             # 3. Меняем активный режим и сбрасываем историю целевой сессии
             self.active_mode = ALL_MODES[mode_key]
             self.session.reset_history()
 
-        # 4. Принудительно закрываем текущий WS — recv() падает с ConnectionClosed,
-        #    внешний while переходит на новую итерацию с новым uri.
+        # 4. Принудительно закрываем текущий WS
         self._force_close_websocket()
 
-        # 5. Загружаем историю и статистику нового режима через REST
+        # 5. Загружаем историю и статистику нового режима.
+        #    WS уже подключён к новому endpoint, но данные не принимаются
+        #    (благодаря _loading_history), поэтому история не смешается с потоком.
         self.fetch_initial_candles()
         self.fetch_24h_stats()
 
-        print(f"✅ Режим переключён на '{mode_key}'")
+        # 6. Снимаем блокировку — теперь WS-свечи пойдут в сессию
+        with self._data_lock:
+            self._loading_history = False
 
+        print(f"✅ Режим переключён на '{mode_key}'")
     def set_leverage(self, leverage: float):
         """Устанавливает кредитное плечо для активной сессии."""
         with self._data_lock:
@@ -344,6 +377,7 @@ class BybitDataCollector:
 
     async def connect_websocket(self):
         """Подключение к WebSocket Bybit и получение данных"""
+        self._reset_console_layout()
         print(f"\n{'='*60}")
         print(f"📡 ПОДКЛЮЧЕНИЕ К WEBSOCKET")
         print(f"{'='*60}")
@@ -354,6 +388,7 @@ class BybitDataCollector:
 
         while self.is_running:
             uri = self.active_mode.ws_endpoint
+            self._reset_console_layout()
             print(f"URI: {uri} (режим: {self.active_mode.key})")
             reconnect_immediately = False
 
@@ -399,6 +434,7 @@ class BybitDataCollector:
                             if "topic" in data and "kline" in data["topic"]:
                                 self.process_kline_data(data)
                             elif "success" in data:
+                                self._reset_console_layout()
                                 print(f"✅ ПОДПИСКА ПОДТВЕРЖДЕНА\n")
 
                         except asyncio.TimeoutError:
@@ -440,6 +476,7 @@ class BybitDataCollector:
 
             # При переключении режима переподключаемся сразу, без задержки
             if not reconnect_immediately:
+                self._reset_console_layout()
                 print(f"\n🔄 ПЕРЕПОДКЛЮЧЕНИЕ через {self.config.WS_RECONNECT_DELAY} секунд...")
                 await asyncio.sleep(self.config.WS_RECONNECT_DELAY)
 
@@ -453,6 +490,7 @@ class BybitDataCollector:
                 "args": [f"kline.{self.interval}.{self.symbol}"],
             }
             await websocket.send(json.dumps(unsubscribe_msg))
+            self._reset_console_layout()
             print("📡 Отправлена отписка от каналов")
             await asyncio.sleep(0.5)
         except:
@@ -460,6 +498,7 @@ class BybitDataCollector:
 
     def shutdown(self):
         """Корректное завершение работы сборщика данных"""
+        self._reset_console_layout()
         print("\n🛑 ЗАВЕРШЕНИЕ РАБОТЫ СБОРЩИКА ДАННЫХ")
         print("  Ожидание завершения WebSocket соединения...")
         self.is_running = False
@@ -546,9 +585,8 @@ class BybitDataCollector:
         if timestamp == 0 or open_price == 0:
             return
 
-        # Пока идёт переключение режима — игнорируем входящие данные.
-        # Это защищает активную сессию от свечей старого endpoint.
-        if self._reconnect_requested:
+        # Пока идёт переключение режима ИЛИ загрузка истории — игнорируем входящие данные.
+        if self._reconnect_requested or self._loading_history:
             return
 
         with self._data_lock:

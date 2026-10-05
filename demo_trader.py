@@ -194,7 +194,10 @@ class DemoTrader:
                 self.pending_order['candles_waited'] += 1
                 if self.pending_order['candles_waited'] >= self.maker_timeout_candles:
                     self._cancel_pending(reason='timeout')
-                    return
+
+                # Если pending существует — больше на этой свече ничего не делаем.
+                # Новый сигнал будет проигнорирован, пока не истечёт таймаут или не исполнится.
+                return
 
             # 2. Управление открытой позицией
             if self.position is not None:

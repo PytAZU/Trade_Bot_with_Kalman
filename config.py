@@ -66,8 +66,8 @@ class Config:
 
     # Параметры maker-исполнения входа
     DEMO_MAKER_ENABLED = True        # использовать лимитный вход
-    DEMO_MAKER_OFFSET = 0.0002       # 0.02% отступ лимитки от текущей цены
-    DEMO_MAKER_TIMEOUT_CANDLES = 3   # через сколько свечей отменить лимитку
+    DEMO_MAKER_OFFSET = 0.0001       # 0.01% отступ лимитки от текущей цены
+    DEMO_MAKER_TIMEOUT_CANDLES = 10   # через сколько свечей отменить лимитку
 
     # Time-stop: максимальное время удержания позиции (0 = отключено)
     DEMO_MAX_POSITION_MINUTES = 60.0

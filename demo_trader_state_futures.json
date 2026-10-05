@@ -22,7 +22,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -38,7 +39,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -54,7 +56,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -70,7 +73,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -86,7 +90,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -102,7 +107,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -118,7 +124,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -134,7 +141,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -150,7 +158,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -166,7 +175,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -182,7 +192,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -198,7 +209,8 @@
       "entry_fee_rate": 0.0006,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -214,7 +226,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": null,
-      "hold_minutes": null
+      "hold_minutes": null,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -230,7 +243,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 0.4377916460494174,
-      "hold_minutes": 12.0
+      "hold_minutes": 12.0,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -246,7 +260,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 1.9063578372671819,
-      "hold_minutes": 20.0
+      "hold_minutes": 20.0,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -262,7 +277,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 0.530667542240004,
-      "hold_minutes": 15.0
+      "hold_minutes": 15.0,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -278,7 +294,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 0.8560826172830338,
-      "hold_minutes": 10.0
+      "hold_minutes": 10.0,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -294,7 +311,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 1.2792951053925967,
-      "hold_minutes": 20.0
+      "hold_minutes": 20.0,
+      "best_price": null
     },
     {
       "direction": "BUY",
@@ -310,7 +328,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 0.3583340285895373,
-      "hold_minutes": 26.0
+      "hold_minutes": 26.0,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -326,7 +345,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 0.7398243604064663,
-      "hold_minutes": 11.0
+      "hold_minutes": 11.0,
+      "best_price": null
     },
     {
       "direction": "SELL",
@@ -342,7 +362,8 @@
       "entry_fee_rate": 0.0002,
       "exit_fee_rate": 0.0006,
       "best_z_abs": 0.1564014001916375,
-      "hold_minutes": 31.0
+      "hold_minutes": 31.0,
+      "best_price": null
     }
   ],
   "position": null,
